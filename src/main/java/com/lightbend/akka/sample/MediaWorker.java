@@ -7,36 +7,33 @@ import akka.actor.dsl.Creators;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
-//#greeter-messages
-public class MediaWorker extends AbstractActor {
-//#greeter-messages
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
-    private static final String text = "EXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAMEXAMPLEAKKAPROGRAM";
+public class MediaWorker extends AbstractActor {
+
+    private static final String WORKER_DIRECTORY = "WorkerData";
 
     private LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
-    static public Props props(Long from, Long to) {
-        return Props.create(MediaWorker.class, () -> new MediaWorker(from, to));
-    }
-
-    private final Long from;
-    private final Long to;
-
-    public MediaWorker(Long from, Long to) {
-        this.from = from;
-        this.to = to;
+    static public Props props() {
+        return Props.create(MediaWorker.class, () -> new MediaWorker());
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(String.class, s -> {
-                    switch(s) {
-                        case "convert":
-                            log.info(text.substring(from.intValue(), to.intValue()));
-                            getSender().tell(text.substring(from.intValue(), to.intValue()), ActorRef.noSender());
-                            break;
-                    }
+                .match(VideoRequest.class, s -> {
+                    log.info("Converting video {}", s.getName());
+
+                    Files.write(Paths.get("WorkerData/worker_media" + s.getPartId() + ".mp4"), s.getData());
+                    Process process = Runtime.getRuntime().exec("ffmpeg -y -v quiet -i WorkerData/worker_media" + s.getPartId() + ".mp4 -shortest -af aecho=1:1 WorkerData/worker_output" + s.getPartId() + ".mp4");
+
+                    byte[] bytes = Files.readAllBytes(Paths.get("WorkerData/worker_output" + s.getPartId() + ".mp4"));
+
+                    VideoRequest videoRequest = new VideoRequest("worker_media" + s.getPartId(),
+                            s.getJobId(), s.getParts(), s.getPartId(), 0, 0, bytes);
+                    getSender().tell(videoRequest, getSelf());
                 })
                 .build();
     }
